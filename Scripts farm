@@ -1,0 +1,416 @@
+-- Banana Client 4.0 — Fullscreen UI + loader
+-- Wklej do executor'a (Synapse / Sol / inny)
+-- Uwaga: HttpGet wymaga włączonego HttpRequests w executorze.
+
+-- defaults
+getgenv().hop = getgenv().hop or "new"
+getgenv().reducelag = getgenv().reducelag == nil and true or getgenv().reducelag
+getgenv().blackscreen = getgenv().blackscreen == nil and false or getgenv().blackscreen
+getgenv().AutoFarm = getgenv().AutoFarm == nil and false or getgenv().AutoFarm
+getgenv().WebhookURL = getgenv().WebhookURL or "" -- jeśli nie używasz, zostaw puste
+
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- safety: remove old GUI if any
+pcall(function()
+    local old = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("BananaClient4_GUI")
+    if old then old:Destroy() end
+end)
+
+-- ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "BananaClient4_GUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Full background frame (covers whole screen)
+local bg = Instance.new("Frame")
+bg.Name = "BG"
+bg.AnchorPoint = Vector2.new(0.5,0.5)
+bg.Position = UDim2.new(0.5,0.5,0.5,0) -- center
+bg.Size = UDim2.new(1,0,1,0)
+bg.BackgroundTransparency = 0
+bg.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+bg.Parent = screenGui
+
+-- Subtle blur (if available)
+local blur
+pcall(function()
+    blur = Instance.new("BlurEffect")
+    blur.Name = "BananaBlur"
+    blur.Parent = game:GetService("Lighting")
+    blur.Size = 0
+end)
+
+-- Gradient overlay for style
+local grad = Instance.new("UIGradient")
+grad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 210, 56)),
+    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(255, 126, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 70, 120))
+}
+grad.Rotation = 45
+grad.Parent = bg
+
+-- Main centered panel
+local panel = Instance.new("Frame")
+panel.Name = "Panel"
+panel.AnchorPoint = Vector2.new(0.5,0.5)
+panel.Position = UDim2.new(0.5,0.5,0.5,0)
+panel.Size = UDim2.new(0.76, 0, 0.78, 0)
+panel.BackgroundTransparency = 0.08
+panel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+panel.Parent = screenGui
+panel.BorderSizePixel = 0
+
+local corner = Instance.new("UICorner", panel)
+corner.CornerRadius = UDim.new(0, 20)
+
+-- Glow frame for nice outline
+local outline = Instance.new("Frame")
+outline.Name = "Outline"
+outline.Size = UDim2.new(1,6,1,6)
+outline.Position = UDim2.new(0,-3,0,-3)
+outline.BackgroundTransparency = 1
+outline.Parent = panel
+
+local outlineStroke = Instance.new("UIStroke")
+outlineStroke.Parent = panel
+outlineStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+outlineStroke.Color = Color3.fromRGB(255, 210, 56)
+outlineStroke.Thickness = 2
+outlineStroke.Transparency = 0.8
+
+-- Title
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Font = Enum.Font.GothamBlack
+title.Text = "BANANA CLIENT 4.0"
+title.TextColor3 = Color3.fromRGB(245,245,245)
+title.TextScaled = true
+title.TextWrapped = true
+title.AnchorPoint = Vector2.new(0.5,0)
+title.Position = UDim2.new(0.5, 0, 0.03, 0)
+title.Size = UDim2.new(0.8,0,0.11,0)
+title.BackgroundTransparency = 1
+title.Parent = panel
+
+-- Subtitle
+local subtitle = Instance.new("TextLabel")
+subtitle.Name = "Subtitle"
+subtitle.Font = Enum.Font.Gotham
+subtitle.Text = "Sleek • Fast • Shiny"
+subtitle.TextColor3 = Color3.fromRGB(220,220,220)
+subtitle.TextScaled = false
+subtitle.TextSize = 18
+subtitle.AnchorPoint = Vector2.new(0.5,0)
+subtitle.Position = UDim2.new(0.5, 0, 0.14, 0)
+subtitle.Size = UDim2.new(0.6,0,0.05,0)
+subtitle.BackgroundTransparency = 1
+subtitle.Parent = panel
+
+-- Left column (controls)
+local leftCol = Instance.new("Frame")
+leftCol.Name = "LeftCol"
+leftCol.AnchorPoint = Vector2.new(0,0)
+leftCol.Position = UDim2.new(0.03,0,0.22,0)
+leftCol.Size = UDim2.new(0.47,0,0.66,0)
+leftCol.BackgroundTransparency = 1
+leftCol.Parent = panel
+
+-- Right column (info / loader)
+local rightCol = Instance.new("Frame")
+rightCol.Name = "RightCol"
+rightCol.AnchorPoint = Vector2.new(1,0)
+rightCol.Position = UDim2.new(0.97,0,0.22,0)
+rightCol.Size = UDim2.new(0.47,0,0.66,0)
+rightCol.BackgroundTransparency = 1
+rightCol.Parent = panel
+
+-- Helper to create nice toggles
+local function makeToggle(parent, yPos, labelText, initial)
+    local container = Instance.new("Frame")
+    container.Name = labelText .. "_Container"
+    container.Size = UDim2.new(1,0,0,48)
+    container.Position = UDim2.new(0,0,yPos,0)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Parent = container
+    lbl.Size = UDim2.new(0.75,0,1,0)
+    lbl.Position = UDim2.new(0,0,0,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 20
+    lbl.TextColor3 = Color3.fromRGB(230,230,230)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+
+    local btn = Instance.new("TextButton")
+    btn.Parent = container
+    btn.Size = UDim2.new(0.24,0,0.75,0)
+    btn.AnchorPoint = Vector2.new(1,0.5)
+    btn.Position = UDim2.new(1, -6, 0.5, 0)
+    btn.BackgroundColor3 = initial and Color3.fromRGB(70,170,70) or Color3.fromRGB(120,120,120)
+    btn.Text = initial and "ON" or "OFF"
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.fromRGB(245,245,245)
+    btn.AutoButtonColor = true
+
+    local bcorner = Instance.new("UICorner", btn)
+    bcorner.CornerRadius = UDim.new(0,10)
+
+    return container, btn
+end
+
+-- Make toggles
+local t1, tbtn1 = makeToggle(leftCol, 0, "AutoFarm", getgenv().AutoFarm)
+local t2, tbtn2 = makeToggle(leftCol, 0.12, "ReduceLag", getgenv().reducelag)
+local t3, tbtn3 = makeToggle(leftCol, 0.24, "BlackScreen", getgenv().blackscreen)
+
+-- Hop selector (dropdown)
+local hopFrame = Instance.new("Frame")
+hopFrame.Name = "HopFrame"
+hopFrame.Size = UDim2.new(1,0,0,60)
+hopFrame.Position = UDim2.new(0,0,0.38,0)
+hopFrame.BackgroundTransparency = 1
+hopFrame.Parent = leftCol
+
+local hopLabel = Instance.new("TextLabel")
+hopLabel.Parent = hopFrame
+hopLabel.Size = UDim2.new(0.6,0,1,0)
+hopLabel.BackgroundTransparency = 1
+hopLabel.Font = Enum.Font.GothamSemibold
+hopLabel.TextSize = 18
+hopLabel.Text = "Hop mode"
+hopLabel.TextColor3 = Color3.fromRGB(230,230,230)
+hopLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local hopDropdown = Instance.new("TextButton")
+hopDropdown.Parent = hopFrame
+hopDropdown.Size = UDim2.new(0.34,0,0.65,0)
+hopDropdown.AnchorPoint = Vector2.new(1,0.5)
+hopDropdown.Position = UDim2.new(1, -6, 0.5, 0)
+hopDropdown.BackgroundColor3 = Color3.fromRGB(110,110,110)
+hopDropdown.Text = string.upper(getgenv().hop or "old")
+hopDropdown.Font = Enum.Font.GothamBold
+hopDropdown.TextSize = 16
+hopDropdown.TextColor3 = Color3.fromRGB(245,245,245)
+local hopCorner = Instance.new("UICorner", hopDropdown)
+hopCorner.CornerRadius = UDim.new(0,10)
+
+-- Webhook input
+local webhookBox = Instance.new("TextBox")
+webhookBox.Parent = rightCol
+webhookBox.Size = UDim2.new(1,0,0,48)
+webhookBox.Position = UDim2.new(0,0,0,0)
+webhookBox.PlaceholderText = "Webhook URL (optional)"
+webhookBox.Text = getgenv().WebhookURL or ""
+webhookBox.ClearTextOnFocus = false
+webhookBox.Font = Enum.Font.Gotham
+webhookBox.TextSize = 16
+webhookBox.TextColor3 = Color3.fromRGB(230,230,230)
+webhookBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+local whCorner = Instance.new("UICorner", webhookBox)
+whCorner.CornerRadius = UDim.new(0,8)
+
+-- Load button + status
+local loadBtn = Instance.new("TextButton")
+loadBtn.Parent = rightCol
+loadBtn.Size = UDim2.new(1,0,0,48)
+loadBtn.Position = UDim2.new(0,0,0,66)
+loadBtn.Text = "Load Script"
+loadBtn.Font = Enum.Font.GothamBold
+loadBtn.TextSize = 18
+loadBtn.TextColor3 = Color3.fromRGB(245,245,245)
+loadBtn.BackgroundColor3 = Color3.fromRGB(90, 30, 140)
+local loadCorner = Instance.new("UICorner", loadBtn)
+loadCorner.CornerRadius = UDim.new(0,10)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Parent = rightCol
+statusLabel.Size = UDim2.new(1,0,0,36)
+statusLabel.Position = UDim2.new(0,0,0,120)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+statusLabel.TextColor3 = Color3.fromRGB(200,200,200)
+statusLabel.Text = "Status: Ready"
+
+-- Fancy close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Parent = panel
+closeBtn.AnchorPoint = Vector2.new(1,0)
+closeBtn.Position = UDim2.new(0.98,0,0.02,0)
+closeBtn.Size = UDim2.new(0,36,0,36)
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 20
+closeBtn.BackgroundTransparency = 0.2
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+local ccorner = Instance.new("UICorner", closeBtn)
+ccorner.CornerRadius = UDim.new(0,8)
+
+-- Black screen overlay (when enabled)
+local blackOverlay = Instance.new("Frame")
+blackOverlay.Name = "BlackOverlay"
+blackOverlay.Size = UDim2.new(1,0,1,0)
+blackOverlay.Position = UDim2.new(0,0,0,0)
+blackOverlay.BackgroundColor3 = Color3.fromRGB(0,0,0)
+blackOverlay.BackgroundTransparency = getgenv().blackscreen and 0 or 1
+blackOverlay.ZIndex = 9999
+blackOverlay.Parent = screenGui
+
+-- Small credits
+local credits = Instance.new("TextLabel")
+credits.Parent = panel
+credits.AnchorPoint = Vector2.new(0,1)
+credits.Position = UDim2.new(0.02,0,0.98,0)
+credits.Size = UDim2.new(0.3,0,0.04,0)
+credits.BackgroundTransparency = 1
+credits.Font = Enum.Font.Gotham
+credits.TextSize = 14
+credits.TextColor3 = Color3.fromRGB(200,200,200)
+credits.Text = "Made with <3 — Banana Team"
+
+-- Anim entrance
+panel.Position = UDim2.new(0.5,0,1.2,0)
+TweenService:Create(panel, TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(0.5,0,0.5,0)}):Play()
+if blur then
+    TweenService:Create(blur, TweenInfo.new(0.6), {Size = 6}):Play()
+end
+
+-- Toggle functionality
+local function toggleBtnToState(btn, state)
+    btn.BackgroundColor3 = state and Color3.fromRGB(70,170,70) or Color3.fromRGB(120,120,120)
+    btn.Text = state and "ON" or "OFF"
+end
+
+-- apply initial visuals
+toggleBtnToState(tbtn1, getgenv().AutoFarm)
+toggleBtnToState(tbtn2, getgenv().reducelag)
+toggleBtnToState(tbtn3, getgenv().blackscreen)
+hopDropdown.Text = string.upper(getgenv().hop or "old")
+blackOverlay.BackgroundTransparency = getgenv().blackscreen and 0 or 1
+
+-- button connections
+tbtn1.MouseButton1Click:Connect(function()
+    getgenv().AutoFarm = not getgenv().AutoFarm
+    toggleBtnToState(tbtn1, getgenv().AutoFarm)
+    statusLabel.Text = "Status: AutoFarm " .. (getgenv().AutoFarm and "ENABLED" or "DISABLED")
+end)
+
+tbtn2.MouseButton1Click:Connect(function()
+    getgenv().reducelag = not getgenv().reducelag
+    toggleBtnToState(tbtn2, getgenv().reducelag)
+    statusLabel.Text = "Status: ReduceLag " .. (getgenv().reducelag and "ON" or "OFF")
+end)
+
+tbtn3.MouseButton1Click:Connect(function()
+    getgenv().blackscreen = not getgenv().blackscreen
+    toggleBtnToState(tbtn3, getgenv().blackscreen)
+    blackOverlay.BackgroundTransparency = getgenv().blackscreen and 0 or 1
+    statusLabel.Text = "Status: BlackScreen " .. (getgenv().blackscreen and "ON" or "OFF")
+end)
+
+-- Hop selector cycles through "old" and "new"
+hopDropdown.MouseButton1Click:Connect(function()
+    if getgenv().hop == "old" then
+        getgenv().hop = "new"
+    else
+        getgenv().hop = "old"
+    end
+    hopDropdown.Text = string.upper(getgenv().hop)
+    statusLabel.Text = "Selected hop: " .. tostring(getgenv().hop)
+end)
+
+-- webhook input
+webhookBox.FocusLost:Connect(function(enterPressed)
+    getgenv().WebhookURL = webhookBox.Text
+    statusLabel.Text = "Webhook set."
+end)
+
+-- load script action
+loadBtn.MouseButton1Click:Connect(function()
+    statusLabel.Text = "Status: Loading..."
+    loadBtn.Text = "Loading..."
+    loadBtn.Active = false
+    local url = "https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/FoxnameFarmdiamond.lua"
+    -- try GET then loadstring
+    local ok, res = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    if not ok then
+        statusLabel.Text = "Status: HttpGet failed — check HttpRequests in executor"
+        loadBtn.Text = "Load Script"
+        loadBtn.Active = true
+        return
+    end
+    local suc, err = pcall(function()
+        local f = loadstring(res)
+        if type(f) == "function" then
+            f()
+        else
+            error("Loaded data is not a function")
+        end
+    end)
+    if suc then
+        statusLabel.Text = "Status: Script loaded successfully"
+        loadBtn.Text = "Loaded ✓"
+        wait(1.2)
+        loadBtn.Text = "Load Script"
+        loadBtn.Active = true
+    else
+        statusLabel.Text = "Status: Script error: "..tostring(err)
+        loadBtn.Text = "Load Script"
+        loadBtn.Active = true
+    end
+end)
+
+-- Close button
+closeBtn.MouseButton1Click:Connect(function()
+    -- animate out
+    TweenService:Create(panel, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(0.5,0,1.2,0)}):Play()
+    if blur then
+        TweenService:Create(blur, TweenInfo.new(0.45), {Size = 0}):Play()
+    end
+    wait(0.55)
+    pcall(function() screenGui:Destroy() end)
+    if blur then
+        pcall(function() blur:Destroy() end)
+    end
+end)
+
+-- Nice keybind: toggle GUI with RightShift
+local UserInputService = game:GetService("UserInputService")
+local visible = true
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        visible = not visible
+        screenGui.Enabled = visible
+    end
+end)
+
+-- Make sure black overlay respects GUI visibility
+screenGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    if not screenGui.Enabled then
+        blackOverlay.Visible = false
+    else
+        blackOverlay.Visible = true
+    end
+end)
+
+-- final polish: small pulsing title
+spawn(function()
+    while screenGui.Parent and screenGui.Parent ~= nil do
+        TweenService:Create(title, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {TextTransparency = 0.12}):Play()
+        wait(2.4)
+    end
+end)
