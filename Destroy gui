@@ -1,0 +1,292 @@
+--[[
+Extreme Map + Player Control GUI
+Działa w całości, toggle dla animacji i podstawowe funkcje gracza
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local HRP = character:WaitForChild("HumanoidRootPart")
+
+-- ====== GUI SETUP ======
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ExtremeMapGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0,320,0,500)
+mainFrame.Position = UDim2.new(0.1,0,0.1,0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = ScreenGui
+
+-- Header
+local header = Instance.new("TextLabel")
+header.Size = UDim2.new(1,0,0,35)
+header.BackgroundColor3 = Color3.fromRGB(45,45,45)
+header.Text = "Extreme Map & Player Control"
+header.TextColor3 = Color3.fromRGB(255,255,255)
+header.TextScaled = true
+header.Parent = mainFrame
+
+-- ScrollFrame
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1,0,1,-35)
+scroll.Position = UDim2.new(0,0,0,35)
+scroll.CanvasSize = UDim2.new(0,0,0,2000)
+scroll.ScrollBarThickness = 8
+scroll.BackgroundTransparency = 1
+scroll.Parent = mainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = scroll
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0,5)
+
+-- Button creator
+local function createButton(name, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,-10,0,40)
+    btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Text = name
+    btn.TextScaled = true
+    btn.Parent = scroll
+    btn.MouseButton1Click:Connect(callback)
+    btn.AutoButtonColor = true
+end
+
+-- ====== PLAYER FUNCTIONS ======
+local toggles = {}
+
+createButton("Toggle Speed", function()
+    toggles.speed = not toggles.speed
+    humanoid.WalkSpeed = toggles.speed and 50 or 16
+end)
+
+createButton("Toggle JumpBoost", function()
+    toggles.jump = not toggles.jump
+    humanoid.JumpPower = toggles.jump and 100 or 50
+end)
+
+createButton("Toggle Fly", function()
+    toggles.fly = not toggles.fly
+    if toggles.fly then
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "FlyVelocity"
+        bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+        bv.Velocity = Vector3.new(0,0,0)
+        bv.Parent = HRP
+    else
+        local bv = HRP:FindFirstChild("FlyVelocity")
+        if bv then bv:Destroy() end
+    end
+end)
+
+createButton("Toggle Noclip", function()
+    toggles.noclip = not toggles.noclip
+end)
+
+createButton("Toggle AntiAFK", function()
+    toggles.antiafk = not toggles.antiafk
+    if toggles.antiafk then
+        spawn(function()
+            while toggles.antiafk do
+                player:Move(Vector3.new(0,0,0))
+                wait(60)
+            end
+        end)
+    end
+end)
+
+createButton("Rejoin Game", function()
+    game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+end)
+
+createButton("Self-Destruct GUI", function()
+    ScreenGui:Destroy()
+end)
+
+-- ====== MAP FUNCTIONS ======
+local activeEffects = {}
+
+local function destroyParts()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+            pcall(function() obj:Destroy() end)
+        end
+    end
+end
+
+local function destroyModels()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and not Players:FindFirstChild(obj.Name) then
+            pcall(function() obj:Destroy() end)
+        end
+    end
+end
+
+local function explodeMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Part") then
+            local explosion = Instance.new("Explosion")
+            explosion.Position = obj.Position
+            explosion.BlastRadius = 5
+            explosion.BlastPressure = 100000
+            explosion.Parent = workspace
+        end
+    end
+end
+
+local function flipMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.PrimaryPart then
+            obj:SetPrimaryPartCFrame(obj.PrimaryPart.CFrame * CFrame.Angles(0,math.rad(180),0))
+        end
+    end
+end
+
+-- Toggle effects
+local function rainbowMap()
+    toggles.rainbow = not toggles.rainbow
+    if toggles.rainbow then
+        activeEffects.rainbow = RunService:BindToRenderStep("RainbowMap",200,function()
+            for _, obj in ipairs(workspace:GetChildren()) do
+                if obj:IsA("Part") then
+                    obj.Color = Color3.fromHSV(math.random(),1,1)
+                end
+            end
+        end)
+    else
+        if activeEffects.rainbow then
+            RunService:UnbindFromRenderStep("RainbowMap")
+        end
+    end
+end
+
+local function spinMap()
+    toggles.spin = not toggles.spin
+    if toggles.spin then
+        activeEffects.spin = RunService:BindToRenderStep("SpinMap",201,function()
+            for _, obj in ipairs(workspace:GetChildren()) do
+                if obj:IsA("Model") and obj.PrimaryPart then
+                    obj:SetPrimaryPartCFrame(obj.PrimaryPart.CFrame * CFrame.Angles(0,math.rad(1),0))
+                end
+            end
+        end)
+    else
+        if activeEffects.spin then
+            RunService:UnbindFromRenderStep("SpinMap")
+        end
+    end
+end
+
+local function bounceMap()
+    toggles.bounce = not toggles.bounce
+    if toggles.bounce then
+        activeEffects.bounce = RunService:BindToRenderStep("BounceMap",202,function()
+            for _, obj in ipairs(workspace:GetChildren()) do
+                if obj:IsA("Part") then
+                    obj.Position = obj.Position + Vector3.new(0, math.sin(tick())*0.1,0)
+                end
+            end
+        end)
+    else
+        if activeEffects.bounce then
+            RunService:UnbindFromRenderStep("BounceMap")
+        end
+    end
+end
+
+local function pulseMap()
+    toggles.pulse = not toggles.pulse
+    if toggles.pulse then
+        activeEffects.pulse = RunService:BindToRenderStep("PulseMap",203,function()
+            for _, obj in ipairs(workspace:GetChildren()) do
+                if obj:IsA("Part") then
+                    local s = 1 + math.sin(tick())*0.2
+                    obj.Size = Vector3.new(s,s,s)
+                end
+            end
+        end)
+    else
+        if activeEffects.pulse then
+            RunService:UnbindFromRenderStep("PulseMap")
+        end
+    end
+end
+
+local function cloneMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") or obj:IsA("Part") then
+            local clone = obj:Clone()
+            clone.Parent = workspace
+            if obj:IsA("Model") and obj.PrimaryPart then
+                clone:SetPrimaryPartCFrame(obj.PrimaryPart.CFrame + Vector3.new(10,0,0))
+            elseif obj:IsA("Part") then
+                clone.Position = obj.Position + Vector3.new(10,0,0)
+            end
+        end
+    end
+end
+
+local function randomTeleportMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Part") then
+            obj.Position = obj.Position + Vector3.new(math.random(-50,50),math.random(0,50),math.random(-50,50))
+        end
+    end
+end
+
+local function invisibleMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Part") then
+            obj.Transparency = 1
+        end
+    end
+end
+
+local function visibleMap()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Part") then
+            obj.Transparency = 0
+        end
+    end
+end
+
+local function resetMapEffects()
+    for k,v in pairs(activeEffects) do
+        RunService:UnbindFromRenderStep(k)
+    end
+    activeEffects = {}
+    toggles.rainbow = false
+    toggles.spin = false
+    toggles.bounce = false
+    toggles.pulse = false
+end
+
+-- ====== CREATE MAP BUTTONS ======
+local mapFunctions = {
+    {"Destroy Parts", destroyParts},
+    {"Destroy Models", destroyModels},
+    {"Explode Map", explodeMap},
+    {"Flip Map", flipMap},
+    {"Rainbow Map", rainbowMap},
+    {"Spin Map", spinMap},
+    {"Bounce Map", bounceMap},
+    {"Pulse Map", pulseMap},
+    {"Clone Map", cloneMap},
+    {"Random Teleport Map", randomTeleportMap},
+    {"Invisible Map", invisibleMap},
+    {"Visible Map", visibleMap},
+    {"Reset Map Effects", resetMapEffects},
+}
+
+for _, info in ipairs(mapFunctions) do
+    createButton(info[1
